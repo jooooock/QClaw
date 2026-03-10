@@ -11,7 +11,8 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "server": "node server/index.mjs"
+    "server": "node server/index.mjs",
+    "patch-config": "node scripts/patch-config.mjs"
   },
   "dependencies": {
     "electron": "^35.0.0"
