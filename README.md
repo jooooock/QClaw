@@ -1,7 +1,7 @@
 # QClaw 客户端逆向
 
 > 注意：纯客户端逆向，接口仍有限制  
-> 当前版本 v0.1.2
+> 当前版本 v0.1.3
 
 ## 本地运行
 
@@ -10,7 +10,22 @@
 yarn
 
 # 启动客户端
-yarn dev v0.1.2
+yarn dev v0.1.3
+```
+
+## 接入自定义wss服务器
+
+```shell
+# 给配置文件打补丁
+yarn patch-config
+
+# 启动wss服务器
+yarn server
+
+# 启动客户端
+yarn dev v0.1.3
+
+# 浏览器打开 http://localhost:9099 模拟微信客服消息进行交互
 ```
 
 ## 截图展示
