@@ -1,0 +1,21 @@
+{
+  "name": "qclaw-reverse",
+  "version": "0.1.1",
+  "description": "QClaw",
+  "type": "module",
+  "author": "jock",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git@github-jock:jooooock/QClawReverse.git"
+  },
+  "scripts": {
+    "dev": "cp -n src/v0.1.1/resources/channel.json node_modules/electron/dist/Electron.app/Contents/Resources/channel.json 2>/dev/null; ELECTRON_RENDERER_URL=file://$(pwd)/src/v0.1.1/out/renderer/index.html electron src/v0.1.1"
+  },
+  "dependencies": {
+    "electron": "^35.0.0"
+  },
+  "devDependencies": {
+    "@electron/asar": "^3.2.8"
+  }
+}
