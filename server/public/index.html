@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QClaw Remote Chat</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f5f5f5; --chat-bg: #fff; --user-bg: #1890ff; --user-fg: #fff;
+  --ai-bg: #f0f0f0; --ai-fg: #333; --border: #e8e8e8; --muted: #999;
+  --tool-bg: #fafafa; --tool-border: #e0e0e0; --code-bg: #282c34; --code-fg: #abb2bf;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); height: 100vh; display: flex; flex-direction: column; }
+
+/* Header */
+.header { background: var(--chat-bg); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.header h1 { font-size: 16px; font-weight: 600; color: #333; }
+.status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+.status-dot.online { background: #52c41a; }
+.header-actions { display: flex; gap: 8px; }
+.header-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; font-size: 13px; cursor: pointer; color: #666; }
+.header-btn:hover { background: #f5f5f5; }
+
+/* Messages */
+.messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.msg { max-width: 80%; display: flex; flex-direction: column; gap: 4px; }
+.msg.user { align-self: flex-end; }
+.msg.ai { align-self: flex-start; }
+.bubble { padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.6; word-break: break-word; white-space: pre-wrap; }
+.msg.user .bubble { background: var(--user-bg); color: var(--user-fg); border-bottom-right-radius: 4px; }
+.msg.ai .bubble { background: var(--ai-bg); color: var(--ai-fg); border-bottom-left-radius: 4px; }
+
+/* Code blocks */
+.bubble pre { background: var(--code-bg); color: var(--code-fg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; font-size: 13px; margin: 6px 0; white-space: pre; }
+.bubble code:not(pre code) { background: #eee; padding: 2px 5px; border-radius: 3px; font-size: 13px; }
+
+/* Tool calls */
+.tool-card { background: var(--tool-bg); border: 1px solid var(--tool-border); border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #666; display: flex; align-items: center; gap: 6px; }
+.tool-icon { font-size: 14px; }
+.tool-status { margin-left: auto; font-size: 11px; }
+.tool-status.completed { color: #52c41a; }
+.tool-status.in_progress { color: #1890ff; }
+.tool-status.failed { color: #ff4d4f; }
+
+/* Streaming cursor */
+.streaming .bubble::after { content: "\u258B"; animation: blink 0.8s infinite; color: #1890ff; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Input */
+.input-area { background: var(--chat-bg); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; gap: 10px; flex-shrink: 0; }
+.input-area textarea { flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 14px; font-family: inherit; resize: none; outline: none; height: 44px; max-height: 120px; line-height: 1.5; }
+.input-area textarea:focus { border-color: #1890ff; }
+.send-btn { background: #1890ff; color: #fff; border: none; border-radius: 8px; padding: 0 20px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.send-btn:hover { background: #40a9ff; }
+.send-btn:disabled { background: #d9d9d9; cursor: not-allowed; }
+.send-btn.cancel { background: #ff4d4f; }
+.send-btn.cancel:hover { background: #ff7875; }
+
+/* Empty state */
+.empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>QClaw Remote</h1>
+  <div class="status">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connecting...</span>
+  </div>
+  <div class="header-actions">
+    <button class="header-btn" onclick="newSession()">New Session</button>
+  </div>
+</div>
+
+<div class="messages" id="messages">
+  <div class="empty" id="emptyState">Send a message to start chatting</div>
+</div>
+
+<div class="input-area">
+  <textarea id="input" placeholder="Type a message..." rows="1"
+    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea>
+  <button class="send-btn" id="sendBtn" onclick="send()">Send</button>
+</div>
+
+<script>
+const messagesEl = document.getElementById("messages");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const statusDot = document.getElementById("statusDot");
+const statusText = document.getElementById("statusText");
+const emptyState = document.getElementById("emptyState");
+
+let connected = false;
+let busy = false;
+let currentAiBubble = null;
+let currentAiText = "";
+let toolCards = new Map();
+
+// ============================================
+// SSE connection
+// ============================================
+function connectSSE() {
+  const es = new EventSource("/api/events");
+
+  es.addEventListener("status", (e) => {
+    const { connected: c } = JSON.parse(e.data);
+    connected = c;
+    statusDot.className = "status-dot" + (c ? " online" : "");
+    statusText.textContent = c ? "QClaw Online" : "QClaw Offline";
+    updateUI();
+  });
+
+  es.addEventListener("chunk", (e) => {
+    const { text } = JSON.parse(e.data);
+    if (!currentAiBubble) startAiMessage();
+    currentAiText += text;
+    renderAiBubble();
+    scrollToBottom();
+  });
+
+  es.addEventListener("tool", (e) => {
+    const { toolCall } = JSON.parse(e.data);
+    if (!currentAiBubble) startAiMessage();
+    toolCards.set(toolCall.tool_call_id, toolCall);
+    renderAiBubble();
+    scrollToBottom();
+  });
+
+  es.addEventListener("done", (e) => {
+    const { stopReason, text, error } = JSON.parse(e.data);
+    // If no chunks were received, create the AI bubble now
+    if (!currentAiBubble && (text || error)) startAiMessage();
+    if (currentAiBubble) {
+      if (stopReason === "end_turn" && text && !currentAiText) {
+        currentAiText = text;
+      }
+      if (stopReason === "error") {
+        currentAiText += "\n\n**Error:** " + (error || "Unknown error");
+      }
+      if (stopReason === "cancelled") {
+        currentAiText += "\n\n*(Cancelled)*";
+      }
+      renderAiBubble();
+      currentAiBubble.closest(".msg").classList.remove("streaming");
+    }
+    finishAiMessage();
+    scrollToBottom();
+  });
+
+  es.onerror = () => {
+    connected = false;
+    statusDot.className = "status-dot";
+    statusText.textContent = "Server Disconnected";
+    updateUI();
+  };
+}
+
+// ============================================
+// Message rendering
+// ============================================
+function startAiMessage() {
+  emptyState?.remove();
+  const msgDiv = document.createElement("div");
+  msgDiv.className = "msg ai streaming";
+  msgDiv.innerHTML = '<div class="bubble"></div>';
+  messagesEl.appendChild(msgDiv);
+  currentAiBubble = msgDiv.querySelector(".bubble");
+  currentAiText = "";
+  toolCards.clear();
+}
+
+function renderAiBubble() {
+  if (!currentAiBubble) return;
+  const container = currentAiBubble.closest(".msg");
+
+  // Remove old tool cards
+  container.querySelectorAll(".tool-card").forEach(el => el.remove());
+
+  // Render tool cards before the bubble
+  for (const [, tc] of toolCards) {
+    const card = document.createElement("div");
+    card.className = "tool-card";
+    const kindIcons = { read: "\uD83D\uDCC4", edit: "\u270F\uFE0F", execute: "\u25B6\uFE0F", search: "\uD83D\uDD0D", fetch: "\uD83C\uDF10", think: "\uD83D\uDCA1", delete: "\uD83D\uDDD1\uFE0F" };
+    card.innerHTML = `
+      <span class="tool-icon">${kindIcons[tc.kind] || "\uD83D\uDD27"}</span>
+      <span>${tc.title || tc.tool_call_id}</span>
+      <span class="tool-status ${tc.status}">${tc.status}</span>
+    `;
+    container.insertBefore(card, currentAiBubble);
+  }
+
+  // Render markdown-ish text
+  currentAiBubble.innerHTML = renderMarkdown(currentAiText);
+}
+
+function finishAiMessage() {
+  currentAiBubble = null;
+  currentAiText = "";
+  toolCards.clear();
+  busy = false;
+  updateUI();
+}
+
+function addUserMessage(text) {
+  emptyState?.remove();
+  const msgDiv = document.createElement("div");
+  msgDiv.className = "msg user";
+  msgDiv.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+  messagesEl.appendChild(msgDiv);
+  scrollToBottom();
+}
+
+// ============================================
+// Simple markdown rendering
+// ============================================
+function renderMarkdown(text) {
+  if (!text) return "";
+  let html = escapeHtml(text);
+
+  // Code blocks: ```lang\n...\n```
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+    `<pre>${code}</pre>`
+  );
+
+  // Inline code: `...`
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  // Bold: **...**
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+  // Italic: *...*
+  html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "<em>$1</em>");
+
+  return html;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ============================================
+// Actions
+// ============================================
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text || !connected || busy) return;
+
+  addUserMessage(text);
+  inputEl.value = "";
+  inputEl.style.height = "44px";
+  busy = true;
+  updateUI();
+
+  try {
+    const res = await fetch("/api/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || "Send failed");
+      busy = false;
+      updateUI();
+    }
+  } catch (e) {
+    alert("Network error: " + e.message);
+    busy = false;
+    updateUI();
+  }
+}
+
+async function cancel() {
+  try { await fetch("/api/cancel", { method: "POST" }); } catch {}
+}
+
+async function newSession() {
+  try { await fetch("/api/new-session", { method: "POST" }); } catch {}
+  messagesEl.innerHTML = '<div class="empty" id="emptyState">Send a message to start chatting</div>';
+  finishAiMessage();
+}
+
+function scrollToBottom() {
+  requestAnimationFrame(() => {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  });
+}
+
+function updateUI() {
+  if (busy) {
+    sendBtn.textContent = "Cancel";
+    sendBtn.className = "send-btn cancel";
+    sendBtn.onclick = cancel;
+    sendBtn.disabled = false;
+  } else {
+    sendBtn.textContent = "Send";
+    sendBtn.className = "send-btn";
+    sendBtn.onclick = send;
+    sendBtn.disabled = !connected;
+  }
+}
+
+// Auto-resize textarea
+inputEl.addEventListener("input", () => {
+  inputEl.style.height = "44px";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
+});
+
+// Start
+connectSSE();
+</script>
+</body>
+</html>

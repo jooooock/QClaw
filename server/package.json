@@ -1,0 +1,10 @@
+{
+  "name": "qclaw-agp-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AGP Bridge Server for QClaw remote chat",
+  "main": "index.mjs",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -10,7 +10,8 @@
     "url": "git@github-jock:jooooock/QClawReverse.git"
   },
   "scripts": {
-    "dev": "node scripts/dev.mjs"
+    "dev": "node scripts/dev.mjs",
+    "server": "node server/index.mjs"
   },
   "dependencies": {
     "electron": "^35.0.0"
