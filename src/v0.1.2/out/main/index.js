@@ -2366,6 +2366,8 @@ const PROTECTED_CONFIG_PATHS = [
   // 用户认证凭证
   "channels.wechat-access.token",
   // 微信登录 token
+  "channels.wechat-access.wsUrl",
+  // 用户自定义 WebSocket 地址
   "agents.defaults.workspace",
   // 用户工作空间路径
   "agents.defaults.model.primary",
@@ -6931,13 +6933,13 @@ function injectEnvUrls(configPath) {
     const models = content.models;
     const providers = models?.providers;
     const qclaw = providers?.qclaw;
-    if (qclaw && qclaw.baseUrl !== envUrls.qclawBaseUrl) {
+    if (qclaw && !qclaw.baseUrl) {
       qclaw.baseUrl = envUrls.qclawBaseUrl;
       changed = true;
     }
     const channels = content.channels;
     const wechatAccess = channels?.["wechat-access"];
-    if (wechatAccess && wechatAccess.wsUrl !== envUrls.wechatWsUrl) {
+    if (wechatAccess && !wechatAccess.wsUrl) {
       wechatAccess.wsUrl = envUrls.wechatWsUrl;
       changed = true;
     }
