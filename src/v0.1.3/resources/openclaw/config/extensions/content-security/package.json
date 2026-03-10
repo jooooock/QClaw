@@ -1,0 +1,15 @@
+{
+  "name": "content-security",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "内容安全插件",
+  "author": "adamliu2",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.1.26"
+  }
+}
