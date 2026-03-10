@@ -10,7 +10,7 @@
     "url": "git@github-jock:jooooock/QClawReverse.git"
   },
   "scripts": {
-    "dev": "cp -n src/v0.1.1/resources/channel.json node_modules/electron/dist/Electron.app/Contents/Resources/channel.json 2>/dev/null; ELECTRON_RENDERER_URL=file://$(pwd)/src/v0.1.1/out/renderer/index.html electron src/v0.1.1"
+    "dev": "node scripts/dev.mjs"
   },
   "dependencies": {
     "electron": "^35.0.0"
