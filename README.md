@@ -33,6 +33,9 @@ yarn dev v0.1.3
 ![](screenshot/1.png)
 ![](screenshot/2.png)
 ![](screenshot/3.png)
+![](screenshot/4.png)
+![](screenshot/5.png)
+![](screenshot/6.png)
 
 
 ## 微信远程工作原理
